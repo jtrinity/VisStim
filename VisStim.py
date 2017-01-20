@@ -13,10 +13,12 @@ import tkFileDialog
 import numpy as np
 import csv as csv
 import sys
+import random
 
 import serial.tools.list_ports
 from pyfirmata import Arduino, util, serial
 
+#Set up Arduino
 class PhantomController:
     #Simulates Arduino pin functions
     #Used when no cotroller is connected
@@ -75,8 +77,6 @@ trigger = board.get_pin('d:5:p')
 pin_a.write(0.0)
 pin_b.write(0.0)
 trigger.write(0.0)
-
-
 
 
 #-----WIDGETS-----
@@ -169,6 +169,9 @@ class MainApp(tk.Tk):
         
         self.drifting_frame = tk.Frame(self.anchor_frame)
         self.drifting_frame.pack(side = "top")
+        
+        self.mix_frame = tk.Frame(self.anchor_frame)
+        self.mix_frame.pack(side = "top")
                 
         #create windows by name
 #        window_names = ("window1", "window2")
@@ -257,12 +260,25 @@ class MainApp(tk.Tk):
         self.drift_sessions = Entry(self.drift_options_frame, "Sessions", (0,0), default = 5)
         self.drift_orientation = Entry(self.drift_options_frame, "Orientation", (0,1), default = 0)
         self.drift_duration = Entry(self.drift_options_frame, "Duration (s)", (0,2), default = 3)
-        self.drift_rate_entry = Entry(self.drift_options_frame, "Drift Rate (deg)", (0,3), default = 0.01)
+        self.drift_rate_entry = Entry(self.drift_options_frame, "Drift Rate (hz)", (0,3), default = 1)
         self.drift_relaxation = Entry(self.drift_options_frame, "Inter-session length (s)", (0,4), default = 3)
         self.drift_startdelay = Entry(self.drift_options_frame, "Start Delay (s)", (0,5), default = 5)
         
         self.run_drift_button = Button(self.drift_options_frame, "Run", self.run_stimulus(self.run_drifting_grating), (0, 6))
         
+        #Mixed Run
+        self.mix_title_frame = tk.Frame(self.mix_frame)
+        self.mix_title_frame.pack(side = "top")
+        
+        self.mix_options_frame = tk.Frame(self.mix_frame)
+        self.mix_options_frame.pack(side = "top")
+        
+        self.mix_title = tk.Label(self.mix_title_frame, text = "Mixed Run")
+        self.mix_title.pack(side = "top")
+        
+        self.mix_relaxation = Entry(self.mix_options_frame, "Inter-session length (s)", (0,4), default = 3)
+        self.mix_startdelay = Entry(self.mix_options_frame, "Start Delay (s)", (0,5), default = 5)
+        self.run_mix_button = Button(self.mix_options_frame, "Run", self.run_stimulus(self.run_mixed_stimuli), (0, 6))
 
         #-----end app widgets-----
         
@@ -282,6 +298,11 @@ class MainApp(tk.Tk):
         
         self.spatial_freq=0.05
         self.number_reversals = 100
+        
+        self.levels = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        self.level_mapping = {0:self.levels[0], 45:self.levels[1], 90: self.levels[2],
+                              135:self.levels[3], 180:self.levels[4], 225:self.levels[5],
+                                270:self.levels[6], 315:self.levels[7]}
         
         self.mon = monitors.Monitor("newmon", distance = self.monitor_distance, width = self.monitor_width)
         self.mon.currentCalib['sizePix'] = [self.hres, self.vres]
@@ -352,31 +373,68 @@ class MainApp(tk.Tk):
             
     def run_phase_reversal(self):
 
-        start_delay = float(self.phase_startdelay.get())
-        sessions = int(self.phase_sessions.get())
-        reversals = int(self.phase_reversals.get())
-        frequency = float(self.phase_frequency.get())
-        relaxation = float(self.phase_relaxation.get())
-        orientation = float(self.phase_orientation.get())
+        start_delay = self.get_num_field(self.phase_startdelay)[0]
+        sessions = int(self.get_num_field(self.phase_sessions)[0])
+        reversals = int(self.get_num_field(self.phase_reversals)[0])
+        frequency = self.get_num_field(self.phase_frequency)[0]
+        relaxation = self.get_num_field(self.phase_relaxation)[0]
+        orientations = self.get_num_field(self.phase_orientation)
+        
+        presentations = orientations * sessions
+        random.shuffle(presentations)
         
         self.build_stim(self.fixation, 'gray', start_delay)
-        for i in range(sessions):
-            self.build_stim(self.stim, 'reversal', reversals, frequency = frequency, orientation = orientation)
+        for block in presentations:
+            self.build_stim(self.stim, 'reversal', reversals, frequency = frequency, orientation = block)
             self.build_stim(self.fixation, 'gray', relaxation)
     
     def run_drifting_grating(self):
      
-        start_delay = float(self.drift_startdelay.get())
-        sessions = int(self.drift_sessions.get())
-        relaxation = float(self.drift_relaxation.get())
-        orientation = float(self.drift_orientation.get())
-        drift_rate = float(self.drift_rate_entry.get())
-        duration = float(self.drift_duration.get())
+        start_delay = self.get_num_field(self.drift_startdelay)[0]
+        sessions = int(self.get_num_field(self.drift_sessions)[0])
+        relaxation = self.get_num_field(self.drift_relaxation)[0]
+        orientations = self.get_num_field(self.drift_orientation)
+        drift_rate = self.get_num_field(self.drift_rate_entry)[0]
+        duration = self.get_num_field(self.drift_duration)[0]
+        
+        presentations = orientations * sessions
+        random.shuffle(presentations)
         
         self.build_stim(self.fixation, 'gray', start_delay)
-        for i in range(sessions):
-            self.build_stim(self.stim, 'drift', duration, drift_rate = drift_rate ,orientation = orientation)
+        for block in presentations:
+            self.build_stim(self.stim, 'drift', duration, drift_rate = drift_rate ,orientation = block)
             self.build_stim(self.fixation, 'gray', relaxation)
+    
+    def run_mixed_stimuli(self):
+        
+        start_delay = self.get_num_field(self.mix_startdelay)[0]
+        relaxation = self.get_num_field(self.mix_relaxation)[0]
+        
+        phase_sessions = int(self.get_num_field(self.phase_sessions)[0])
+        reversals = int(self.get_num_field(self.phase_reversals)[0])
+        frequency = self.get_num_field(self.phase_frequency)[0]
+        phase_orientations = self.get_num_field(self.phase_orientation)
+        phase_orientations_p = [['p', x] for x in phase_orientations]
+        
+        drift_sessions = int(self.get_num_field(self.drift_sessions)[0])
+        drift_rate = self.get_num_field(self.drift_rate_entry)[0]
+        duration = self.get_num_field(self.drift_duration)[0]
+        drift_orientations = self.get_num_field(self.drift_orientation)
+        drift_orientations_d = [['d', x] for x in drift_orientations]
+        
+        presentations = (phase_orientations_p * phase_sessions) + (drift_orientations_d * drift_sessions)
+        random.shuffle(presentations)
+        
+        self.build_stim(self.fixation, 'gray', start_delay)
+        for block in presentations:
+            if block[0] == 'p':
+                self.build_stim(self.stim, 'reversal', reversals, frequency = frequency, orientation = block[1])
+                self.build_stim(self.fixation, 'gray', relaxation)
+            elif block[0] == 'd':
+                self.build_stim(self.stim, 'drift', duration, drift_rate = drift_rate ,orientation = block[1])
+                self.build_stim(self.fixation, 'gray', relaxation)
+            else:
+                print "missing stim block"
 
     
     #length in seconds for static image and drifting, length in number of reversals for phase reversal (2 * num stims)
@@ -384,17 +442,19 @@ class MainApp(tk.Tk):
     def build_stim(self, stim, stim_type, length, **kwargs):
         orientation = 0
         direction = '+'
-        drift_rate = self.drift_rate
+        drift_rate = 1.0/self.refresh_rate
+        
         if 'orientation' in kwargs:
             orientation = kwargs['orientation']
         if 'direction' in kwargs:
             direction = kwargs['direction']
         if 'drift_rate' in kwargs:
-            drift_rate = kwargs['drift_rate']
-            
+            drift_rate = drift_rate * kwargs['drift_rate']
+        
+        
         if stim_type == 'gray':
             for frame in range(int(length * self.refresh_rate)):
-                self.frame_list.append((0.0, 0.0,stim.draw, stim.setPhase, tuple((0.0,)), stim.setOri, orientation))
+                self.frame_list.append((0.0, 0.0, stim.draw, stim.setPhase, tuple((0.0,)), stim.setOri, orientation))
         if stim_type == 'drift':
             for frame in range(int(length * self.refresh_rate)):
                 self.frame_list.append((1.0, 1.0, stim.draw, stim.setPhase, tuple((drift_rate,direction)), stim.setOri, orientation))
@@ -483,7 +543,23 @@ class MainApp(tk.Tk):
             self.window.close()
         board.exit()
         self.destroy()
-
+    
+    def get_num_field(self, field):
+        field_entry = field.get()
+        entries = field_entry.split(',')
+        num_entries = []
+        for entry in entries:
+            try:
+                num_entry = float(entry)
+            except ValueError:
+                print "Bad entry field value"
+                return None
+            num_entries.append(num_entry)
+        return num_entries
+    
+    def generate_codes(self, orientations):
+        orientations.sort()
+        
     
     #Open a file dialog and record selected filenames to self.file_names
     def load(self):
@@ -501,6 +577,7 @@ class MainApp(tk.Tk):
 
               
 #-----Windows-----
+#Not currently in use. Available for adding additional control panels. See tk framework file for usage.
 #Left Window
 class window_one(Window):
     def __init__(self, parent, *args, **kwargs):
