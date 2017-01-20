@@ -450,20 +450,25 @@ class MainApp(tk.Tk):
             direction = kwargs['direction']
         if 'drift_rate' in kwargs:
             drift_rate = drift_rate * kwargs['drift_rate']
-        
-        
+            
         if stim_type == 'gray':
             for frame in range(int(length * self.refresh_rate)):
                 self.frame_list.append((0.0, 0.0, stim.draw, stim.setPhase, tuple((0.0,)), stim.setOri, orientation))
+                
         if stim_type == 'drift':
+            drift_orientations = self.get_num_field(self.drift_orientation)
+            level_index = self.levels[drift_orientations.index(orientation)]
             for frame in range(int(length * self.refresh_rate)):
-                self.frame_list.append((1.0, 1.0, stim.draw, stim.setPhase, tuple((drift_rate,direction)), stim.setOri, orientation))
+                self.frame_list.append((1.0, level_index, stim.draw, stim.setPhase, tuple((drift_rate,direction)), stim.setOri, orientation))
+                
         if stim_type == 'reversal':
+            phase_orientations = self.get_num_field(self.phase_orientation)
+            level_index = self.levels[phase_orientations.index(orientation)]
             for reversal in range(length):
                 for frame in range(int(self.refresh_rate / kwargs['frequency'])):
-                    self.frame_list.append((1.0, 1.0, stim.draw, stim.setPhase, tuple((0.0,)), stim.setOri, orientation))
+                    self.frame_list.append((1.0, level_index, stim.draw, stim.setPhase, tuple((0.0,)), stim.setOri, orientation))
                 for frame in range(int(self.refresh_rate / kwargs['frequency'])):
-                    self.frame_list.append((0.0, 1.0, stim.draw, stim.setPhase, tuple((0.5,)), stim.setOri, orientation))
+                    self.frame_list.append((0.0, 0.0, stim.draw, stim.setPhase, tuple((0.5,)), stim.setOri, orientation))
                     
     def run_stimulus(self, stim_function):
         def wrapper():
@@ -544,6 +549,7 @@ class MainApp(tk.Tk):
         board.exit()
         self.destroy()
     
+    #return fields as float values
     def get_num_field(self, field):
         field_entry = field.get()
         entries = field_entry.split(',')
@@ -557,6 +563,7 @@ class MainApp(tk.Tk):
             num_entries.append(num_entry)
         return num_entries
     
+    #create pseudo-random presentation list disallowing repetitions
     def generate_codes(self, orientations):
         orientations.sort()
         
